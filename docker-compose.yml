@@ -1,0 +1,70 @@
+version: '3.8'
+
+services:
+  # Backend Service (Node.js API)
+  server:
+    build:
+      context: . # Build from the root directory
+      dockerfile: packages/server/Dockerfile
+    container_name: homereminder-server
+    restart: unless-stopped
+    env_file:
+      - ./packages/server/.env # Load environment variables from .env
+    environment:
+      # Override DATABASE_URL to use the service name 'db'
+      DATABASE_URL: postgresql://${POSTGRES_USER:-user}:${POSTGRES_PASSWORD:-password}@db:5432/${POSTGRES_DB:-taskdb}?schema=public
+    ports:
+      - "5001:5001" # Expose backend port (host:container)
+    depends_on:
+      - db # Wait for db to be healthy (basic check)
+    networks:
+      - task-network
+    volumes: []
+       # Mount dist for potential hot-reloading during dev (optional)
+       # - ./packages/server/dist:/app/packages/server/dist
+       # Mount src for development using ts-node-dev inside container (more complex setup)
+       # - ./packages/server/src:/app/packages/server/src
+       # Mount prisma schema for easy access/updates during dev
+       # - ./packages/server/prisma:/app/packages/server/prisma
+       # Note: Volume mounting like this is great for dev, but less ideal for production images.
+
+  # Frontend Service (Nginx serving React build)
+  client:
+    build:
+      context: .
+      dockerfile: packages/client/Dockerfile
+    container_name: homereminder-client
+    restart: unless-stopped
+    ports:
+      - "8080:80" # Expose frontend on host port 8080 (or 80 if free)
+    networks:
+      - task-network
+    # No depends_on needed, Nginx serves static files
+
+  # Database Service (PostgreSQL)
+  db:
+    image: postgres:15-alpine # Use a specific version
+    container_name: homereminder-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-taskdb}
+      POSTGRES_USER: ${POSTGRES_USER:-user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password} # Set strong passwords via env variables or secrets
+    volumes:
+      - postgres_data:/var/lib/postgresql/data # Persist database data
+    ports:
+      - "5432:5432" # Expose DB port *only if* you need external access (e.g., GUI tool)
+    networks:
+      - task-network
+    healthcheck:
+        test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-user} -d ${POSTGRES_DB:-taskdb}"]
+        interval: 10s
+        timeout: 5s
+        retries: 5
+
+networks:
+  task-network:
+    driver: bridge
+
+volumes:
+  postgres_data:

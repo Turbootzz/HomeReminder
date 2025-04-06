@@ -1,0 +1,28 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Task {
+  id          Int      @id @default(autoincrement())
+  title       String
+  description String? // Optional description
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  archived    Boolean  @default(false) // To hide old/irrelevant tasks
+  completions Completion[]
+}
+
+model Completion {
+  id          Int      @id @default(autoincrement())
+  taskId      Int
+  task        Task     @relation(fields: [taskId], references: [id], onDelete: Cascade) // Link back to Task
+  completedBy String // Simple username/identifier
+  completedAt DateTime @default(now())
+
+  @@index([taskId, completedAt]) // Index for efficient querying by task and date
+}
